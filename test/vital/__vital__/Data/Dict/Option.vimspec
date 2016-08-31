@@ -1,0 +1,182 @@
+Describe Data.Dict.Option
+  Before all
+    let Path = vital#vital#import('System.Filepath')
+    let scope = themis#helper('scope')
+    let sfile = Path.realpath('autoload/vital/__vital__/Data/Dict/Option.vim')
+  End
+
+  Before
+    let Option = vital#vital#import('Data.Dict.Option')
+    let sf = scope.funcs(sfile)
+  End
+
+  Describe .translate()
+    It returns an argument list from {options} and {schemes}
+      let options = {
+            \ 'foo': 0,
+            \ 'bar': 1,
+            \ 'hoge': 'hoge',
+            \ 'piyo': ['p', 'i', 'y', 'o'],
+            \}
+      let schemes = {
+            \ 'foo': 1,
+            \ 'bar': 1,
+            \ 'hoge': 1,
+            \ 'piyo': 1,
+            \}
+      let ret = Option.translate(options, schemes)
+      Assert Equals(sort(ret), sort([
+            \ '--bar',
+            \ '--hoge=hoge',
+            \ '--piyo=p',
+            \ '--piyo=i',
+            \ '--piyo=y',
+            \ '--piyo=o',
+            \]))
+    End
+
+    It follows translation rule written in {schemes}
+      let options = {
+            \ 'foo': 'foo',
+            \ 'bar': 'bar',
+            \ 'hoge': 'hoge',
+            \}
+      let schemes = {
+            \ 'foo': '%k',
+            \ 'bar': '%v',
+            \ 'hoge': '--%k %v',
+            \}
+      let ret = Option.translate(options, schemes)
+      Assert Equals(sort(ret), sort([
+            \ 'foo',
+            \ 'bar',
+            \ '--hoge',
+            \ 'hoge',
+            \]))
+    End
+
+    It ignores attributes in {options} which does not exist in {schemes}
+      let options = {
+            \ 'foo': 0,
+            \ 'bar': 1,
+            \ 'hoge': 'hoge',
+            \ 'piyo': ['p', 'i', 'y', 'o'],
+            \}
+      let schemes = {
+            \ 'foo': 1,
+            \}
+      let ret = Option.translate(options, schemes)
+      Assert Equals(ret, [])
+    End
+  End
+
+  Describe .strip_quotes({value})
+    It strips leading and trailing single quotes
+      Assert Equals(Option.strip_quotes("'foo'"), 'foo')
+      Assert Equals(Option.strip_quotes("'foo bar'"), 'foo bar')
+    End
+
+    It strips leading and trailing double quotes
+      Assert Equals(Option.strip_quotes('"foo"'), 'foo')
+      Assert Equals(Option.strip_quotes('"foo bar"'), 'foo bar')
+    End
+
+    It strips leading and trailing single quotes of -k='value' or --key='value'
+      Assert Equals(Option.strip_quotes("-k='foo'"), '-k=foo')
+      Assert Equals(Option.strip_quotes("-k='foo bar'"), '-k=foo bar')
+      Assert Equals(Option.strip_quotes("--key='foo'"), '--key=foo')
+      Assert Equals(Option.strip_quotes("--key='foo bar'"), '--key=foo bar')
+    End
+
+    It strips leading and trailing double quotes of -k="value" or --key="value"
+      Assert Equals(Option.strip_quotes('-k="foo"'), '-k=foo')
+      Assert Equals(Option.strip_quotes('-k="foo bar"'), '-k=foo bar')
+      Assert Equals(Option.strip_quotes('--key="foo"'), '--key=foo')
+      Assert Equals(Option.strip_quotes('--key="foo bar"'), '--key=foo bar')
+    End
+  End
+
+  Describe .split_args({args})
+    It splits a String {args} into a List by whitespaces
+      let ret = Option.split_args('A B C')
+      Assert Equals(ret, ['A', 'B', 'C'])
+    End
+
+    It does not split a String {args} into a List if value is enclosed by single quotes
+      let ret = Option.split_args('A ''B C'' D')
+      Assert Equals(ret, ['A', 'B C', 'D'])
+    End
+
+    It does not split a String {args} into a List if value is enclosed by double quotes
+      let ret = Option.split_args('A "B C" D')
+      Assert Equals(ret, ['A', 'B C', 'D'])
+    End
+
+    It does not split a String {args} into a List if whitespace is escaped
+      let ret = Option.split_args('A B\ C D')
+      Assert Equals(ret, ['A', 'B C', 'D'])
+    End
+
+    It remove single quotes from "--key='v a l u e'" and return "--key=v a l u e"
+      let ret = Option.split_args('--key=''v a l u e''')
+      Assert Equals(ret, ['--key=v a l u e'])
+    End
+
+    It remove double quotes from '--key="v a l u e"' and return '--key=v a l u e'
+      let ret = Option.split_args('--key="v a l u e"')
+      Assert Equals(ret, ['--key=v a l u e'])
+    End
+
+    It unescape escaped whitespace from '--key=v\ a\ l\ u\ e' and return '--key=v a l u e'
+      let ret = Option.split_args('--key=v\ a\ l\ u\ e')
+      Assert Equals(ret, ['--key=v a l u e'])
+    End
+  End
+
+  Describe s:_translate()
+    It returns ['-X'] for ('X', { 'X': 1 }, '')
+      let ret = sf._translate('X', { 'X': 1 }, '')
+      Assert Equals(ret, ['-X'])
+    End
+
+    It returns ['--KEY'] for ('KEY', { 'KEY': 1 }, '')
+      let ret = sf._translate('KEY', { 'KEY': 1 }, '')
+      Assert Equals(ret, ['--KEY'])
+    End
+
+    It returns ['KEY'] for ('KEY', { 'KEY': 'VALUE' }, '%k')
+      let ret = sf._translate('KEY', { 'KEY': 'VALUE' }, '%k')
+      Assert Equals(ret, ['KEY'])
+    End
+
+    It returns ['VALUE'] for ('KEY', { 'KEY': 'VALUE' }, '%v')
+      let ret = sf._translate('KEY', { 'KEY': 'VALUE' }, '%v')
+      Assert Equals(ret, ['VALUE'])
+    End
+
+    It returns ['--KEY=VALUE'] for ('KEY', { 'KEY': 'VALUE' }, '--%k=%v')
+      let ret = sf._translate('KEY', { 'KEY': 'VALUE' }, '--%k=%v')
+      Assert Equals(ret, ['--KEY=VALUE'])
+    End
+
+    It returns ['--KEY=V A L U E'] for ('KEY', { 'KEY': 'V A L U E' }, '--%k=%v')
+      let ret = sf._translate('KEY', { 'KEY': 'V A L U E' }, '--%k=%v')
+      Assert Equals(ret, ['--KEY=V A L U E'])
+    End
+
+    It returns ['--KEY', 'VALUE'] for ('KEY', { 'KEY': 'VALUE' }, '--%k %v')
+      let ret = sf._translate('KEY', { 'KEY': 'VALUE' }, '--%k %v')
+      Assert Equals(ret, ['--KEY', 'VALUE'])
+    End
+
+    It returns ['--KEY', 'V A L U E'] for ('KEY', { 'KEY': 'V A L U E' }, '--%k %v')
+      let ret = sf._translate('KEY', { 'KEY': 'V A L U E' }, '--%k %v')
+      Assert Equals(ret, ['--KEY', 'V A L U E'])
+    End
+
+    It returns ['-Xv1', '-Xv2', '-Xv3'] for ('X', { 'X': ['v1', 'v2', 'v3'] }, '-%k%v')
+      let ret = sf._translate('X', { 'X': ['v1', 'v2', 'v3'] }, '-%k%v')
+      Assert Equals(ret, ['-Xv1', '-Xv2', '-Xv3'])
+    End
+  End
+End
